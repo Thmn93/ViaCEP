@@ -1,15 +1,21 @@
 import { useMemo, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import {
   ActivityIndicator,
   Button,
   Card,
   Dialog,
   HelperText,
+  Menu,
   Portal,
   Text,
   TextInput,
 } from 'react-native-paper';
+
+type BrazilianState = {
+  uf: string;
+  name: string;
+};
 
 type ViaCepResponse = {
   cep: string;
@@ -21,12 +27,46 @@ type ViaCepResponse = {
   erro?: boolean;
 };
 
+function getBrazilianStates(): BrazilianState[] {
+  return [
+    { uf: 'AC', name: 'Acre' },
+    { uf: 'AL', name: 'Alagoas' },
+    { uf: 'AP', name: 'Amapa' },
+    { uf: 'AM', name: 'Amazonas' },
+    { uf: 'BA', name: 'Bahia' },
+    { uf: 'CE', name: 'Ceara' },
+    { uf: 'DF', name: 'Distrito Federal' },
+    { uf: 'ES', name: 'Espirito Santo' },
+    { uf: 'GO', name: 'Goias' },
+    { uf: 'MA', name: 'Maranhao' },
+    { uf: 'MT', name: 'Mato Grosso' },
+    { uf: 'MS', name: 'Mato Grosso do Sul' },
+    { uf: 'MG', name: 'Minas Gerais' },
+    { uf: 'PA', name: 'Para' },
+    { uf: 'PB', name: 'Paraiba' },
+    { uf: 'PR', name: 'Parana' },
+    { uf: 'PE', name: 'Pernambuco' },
+    { uf: 'PI', name: 'Piaui' },
+    { uf: 'RJ', name: 'Rio de Janeiro' },
+    { uf: 'RN', name: 'Rio Grande do Norte' },
+    { uf: 'RS', name: 'Rio Grande do Sul' },
+    { uf: 'RO', name: 'Rondonia' },
+    { uf: 'RR', name: 'Roraima' },
+    { uf: 'SC', name: 'Santa Catarina' },
+    { uf: 'SP', name: 'Sao Paulo' },
+    { uf: 'SE', name: 'Sergipe' },
+    { uf: 'TO', name: 'Tocantins' },
+  ];
+}
+
 export function CepSearch() {
   const [cep, setCep] = useState('');
   const [numero, setNumero] = useState('');
   const [complemento, setComplemento] = useState('');
+  const [estado, setEstado] = useState('');
   const [loading, setLoading] = useState(false);
   const [dialogVisible, setDialogVisible] = useState(false);
+  const [stateMenuVisible, setStateMenuVisible] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [address, setAddress] = useState<ViaCepResponse | null>(null);
 
@@ -41,6 +81,11 @@ export function CepSearch() {
 
     return `${digits.slice(0, 5)}-${digits.slice(5)}`;
   };
+
+  const selectedStateLabel = useMemo(() => {
+    const selected = getBrazilianStates().find((item) => item.uf === estado);
+    return selected ? `${selected.name} (${selected.uf})` : '';
+  }, [estado]);
 
   const handleSearch = async () => {
     if (cepDigits.length !== 8) {
@@ -64,15 +109,18 @@ export function CepSearch() {
       if (data.erro) {
         setAddress(null);
         setComplemento('');
+        setEstado('');
         setErrorMessage('CEP nao encontrado. Tente novamente.');
         return;
       }
 
       setAddress(data);
       setComplemento(data.complemento || '');
+      setEstado(data.uf || '');
     } catch {
       setAddress(null);
       setComplemento('');
+      setEstado('');
       setErrorMessage('Nao foi possivel consultar o CEP. Verifique a conexao e tente novamente.');
     } finally {
       setLoading(false);
@@ -120,7 +168,29 @@ export function CepSearch() {
           <TextInput label="Logradouro" mode="outlined" value={address?.logradouro ?? ''} editable={false} style={styles.input} />
           <TextInput label="Bairro" mode="outlined" value={address?.bairro ?? ''} editable={false} style={styles.input} />
           <TextInput label="Cidade" mode="outlined" value={address?.localidade ?? ''} editable={false} style={styles.input} />
-          <TextInput label="Estado" mode="outlined" value={address?.uf ?? ''} editable={false} style={styles.input} />
+          <Menu
+            visible={stateMenuVisible}
+            onDismiss={() => setStateMenuVisible(false)}
+            anchor={
+              <Pressable style={styles.stateSelectTrigger} onPress={() => setStateMenuVisible(true)}>
+                <Text style={styles.stateLabel}>Estado</Text>
+                <Text>{selectedStateLabel || 'Selecionar estado'}</Text>
+              </Pressable>
+            }>
+            <ScrollView style={styles.menuScroll}>
+              {getBrazilianStates().map((item) => (
+                <Menu.Item
+                  key={item.uf}
+                  title={`${item.name} (${item.uf})`}
+                  onPress={() => {
+                    setEstado(item.uf);
+                    setStateMenuVisible(false);
+                  }}
+                />
+              ))}
+            </ScrollView>
+          </Menu>
+
           <TextInput
             label="Numero"
             mode="outlined"
@@ -158,6 +228,7 @@ export function CepSearch() {
           </Dialog.Actions>
         </Dialog>
       </Portal>
+
     </View>
   );
 }
@@ -191,5 +262,20 @@ const styles = StyleSheet.create({
   buttonWrapper: {
     marginTop: 8,
     alignItems: 'center',
+  },
+  stateSelectTrigger: {
+    borderWidth: 1,
+    borderColor: '#787878',
+    borderRadius: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 10,
+  },
+  stateLabel: {
+    fontSize: 12,
+    marginBottom: 4,
+  },
+  menuScroll: {
+    maxHeight: 260,
   },
 });
