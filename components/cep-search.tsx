@@ -1,21 +1,21 @@
 import { useMemo, useState } from "react";
 import {
-    Platform,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    View,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
 } from "react-native";
 import {
-    ActivityIndicator,
-    Button,
-    Card,
-    Dialog,
-    HelperText,
-    Menu,
-    Portal,
-    Text,
-    TextInput,
+  ActivityIndicator,
+  Button,
+  Card,
+  Dialog,
+  HelperText,
+  Menu,
+  Portal,
+  Text,
+  TextInput,
 } from "react-native-paper";
 
 type BrazilianState = {
@@ -118,8 +118,21 @@ export function CepSearch() {
   const [consultaCpf, setConsultaCpf] = useState("");
   const [consultaError, setConsultaError] = useState("");
   const [consultaLoading, setConsultaLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const ITEMS_PER_PAGE = 2;
 
   const cepDigits = useMemo(() => cep.replace(/\D/g, ""), [cep]);
+
+  const totalPages = useMemo(() => {
+    return Math.ceil(registeredUsers.length / ITEMS_PER_PAGE) || 1;
+  }, [registeredUsers.length]);
+
+  const paginatedUsers = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    const endIndex = startIndex + ITEMS_PER_PAGE;
+    return registeredUsers.slice(startIndex, endIndex);
+  }, [registeredUsers, currentPage]);
 
   const formatCep = (value: string) => {
     const digits = value.replace(/\D/g, "").slice(0, 8);
@@ -197,6 +210,12 @@ export function CepSearch() {
       setConsultaError(
         "Sem conexao com API local. Inicie o backend AppSqlite na porta 3333.",
       );
+    }
+  };
+
+  const handlePageChange = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
     }
   };
 
@@ -571,55 +590,103 @@ export function CepSearch() {
               </Card.Content>
             </Card>
           ) : (
-            registeredUsers.map((user) => (
-              <Card key={user.id} style={styles.registeredCard}>
-                <Card.Content>
-                  <Text variant="titleMedium" style={styles.registeredName}>
-                    {user.nome}
-                  </Text>
-                  <Text style={styles.registeredInfo}>
-                    Email: {user.email || "-"}
-                  </Text>
-                  <Text style={styles.registeredInfo}>CPF: {user.cpf}</Text>
-                  <Text style={styles.registeredInfo}>CEP: {user.cep}</Text>
-                  <Text style={styles.registeredInfo}>
-                    Endereco: {user.address.logradouro}
-                  </Text>
-                  <Text style={styles.registeredInfo}>
-                    Bairro: {user.address.bairro}
-                  </Text>
-                  <Text style={styles.registeredInfo}>
-                    Cidade: {user.address.localidade}
-                  </Text>
-                  <Text style={styles.registeredInfo}>
-                    Estado: {user.estado || user.address.uf}
-                  </Text>
-                  <Text style={styles.registeredInfo}>
-                    Numero: {user.numero || "-"}
-                  </Text>
-                  <Text style={styles.registeredInfo}>
-                    Complemento: {user.complemento || "-"}
-                  </Text>
-                  <View style={styles.cardActions}>
-                    <Button
-                      mode="outlined"
-                      compact
-                      onPress={() => openCadastroModal(user)}
-                    >
-                      Editar
-                    </Button>
-                    <Button
-                      mode="text"
-                      compact
-                      textColor="#b00020"
-                      onPress={() => handleDeleteUser(user.id)}
-                    >
-                      Excluir
-                    </Button>
-                  </View>
-                </Card.Content>
-              </Card>
-            ))
+            <>
+              {paginatedUsers.map((user) => (
+                <Card key={user.id} style={styles.registeredCard}>
+                  <Card.Content>
+                    <Text variant="titleMedium" style={styles.registeredName}>
+                      {user.nome}
+                    </Text>
+                    <Text style={styles.registeredInfo}>
+                      Email: {user.email || "-"}
+                    </Text>
+                    <Text style={styles.registeredInfo}>CPF: {user.cpf}</Text>
+                    <Text style={styles.registeredInfo}>CEP: {user.cep}</Text>
+                    <Text style={styles.registeredInfo}>
+                      Endereco: {user.address.logradouro}
+                    </Text>
+                    <Text style={styles.registeredInfo}>
+                      Bairro: {user.address.bairro}
+                    </Text>
+                    <Text style={styles.registeredInfo}>
+                      Cidade: {user.address.localidade}
+                    </Text>
+                    <Text style={styles.registeredInfo}>
+                      Estado: {user.estado || user.address.uf}
+                    </Text>
+                    <Text style={styles.registeredInfo}>
+                      Numero: {user.numero || "-"}
+                    </Text>
+                    <Text style={styles.registeredInfo}>
+                      Complemento: {user.complemento || "-"}
+                    </Text>
+                    <View style={styles.cardActions}>
+                      <Button
+                        mode="outlined"
+                        compact
+                        onPress={() => openCadastroModal(user)}
+                      >
+                        Editar
+                      </Button>
+                      <Button
+                        mode="text"
+                        compact
+                        textColor="#b00020"
+                        onPress={() => handleDeleteUser(user.id)}
+                      >
+                        Excluir
+                      </Button>
+                    </View>
+                  </Card.Content>
+                </Card>
+              ))}
+
+              <View style={styles.paginationContainer}>
+                <Button
+                  mode="text"
+                  compact
+                  disabled={currentPage === 1}
+                  onPress={() => handlePageChange(currentPage - 1)}
+                  style={styles.paginationButton}
+                >
+                  Anterior
+                </Button>
+
+                <View style={styles.paginationNumbers}>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(
+                    (page) => (
+                      <Pressable
+                        key={page}
+                        onPress={() => handlePageChange(page)}
+                        style={[
+                          styles.pageNumber,
+                          currentPage === page && styles.pageNumberActive,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.pageNumberText,
+                            currentPage === page && styles.pageNumberActiveText,
+                          ]}
+                        >
+                          {page}
+                        </Text>
+                      </Pressable>
+                    ),
+                  )}
+                </View>
+
+                <Button
+                  mode="text"
+                  compact
+                  disabled={currentPage === totalPages}
+                  onPress={() => handlePageChange(currentPage + 1)}
+                  style={styles.paginationButton}
+                >
+                  Próxima
+                </Button>
+              </View>
+            </>
           )}
         </View>
       )}
@@ -827,5 +894,43 @@ const styles = StyleSheet.create({
   },
   menuScroll: {
     maxHeight: 260,
+  },
+  paginationContainer: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 16,
+    marginBottom: 8,
+    gap: 12,
+  },
+  paginationButton: {
+    minWidth: 60,
+  },
+  paginationNumbers: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 6,
+  },
+  pageNumber: {
+    width: 32,
+    height: 32,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: "#787878",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  pageNumberActive: {
+    backgroundColor: "#1f51ba",
+    borderColor: "#1f51ba",
+  },
+  pageNumberText: {
+    fontSize: 14,
+    color: "#787878",
+    fontWeight: "500",
+  },
+  pageNumberActiveText: {
+    color: "#ffffff",
   },
 });
