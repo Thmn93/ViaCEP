@@ -1,21 +1,21 @@
 import { useMemo, useState } from "react";
 import {
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
+    Platform,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    View,
 } from "react-native";
 import {
-  ActivityIndicator,
-  Button,
-  Card,
-  Dialog,
-  HelperText,
-  Menu,
-  Portal,
-  Text,
-  TextInput,
+    ActivityIndicator,
+    Button,
+    Card,
+    Dialog,
+    HelperText,
+    Menu,
+    Portal,
+    Text,
+    TextInput,
 } from "react-native-paper";
 
 type BrazilianState = {
@@ -261,7 +261,7 @@ export function CepSearch() {
       setNome(user.nome);
       setEmail(user.email);
       setCpf(user.cpf);
-      setCep(user.cep);
+      setCep(formatCep(user.cep));
       setLogradouro(user.address.logradouro);
       setBairro(user.address.bairro);
       setCidade(user.address.localidade);
@@ -728,6 +728,64 @@ export function CepSearch() {
               placeholder="000.000.000-00"
               style={styles.input}
               maxLength={14}
+            />
+            <TextInput
+              label="CEP"
+              mode="outlined"
+              keyboardType="number-pad"
+              value={cep}
+              onChangeText={(value) => setCep(formatCep(value))}
+              placeholder="00000-000"
+              style={styles.input}
+              maxLength={9}
+            />
+            <TextInput
+              label="Logradouro"
+              mode="outlined"
+              value={logradouro}
+              onChangeText={setLogradouro}
+              style={styles.input}
+            />
+            <TextInput
+              label="Bairro"
+              mode="outlined"
+              value={bairro}
+              onChangeText={setBairro}
+              style={styles.input}
+            />
+            <TextInput
+              label="Cidade"
+              mode="outlined"
+              value={cidade}
+              onChangeText={setCidade}
+              style={styles.input}
+            />
+            <TextInput
+              label="Estado (UF)"
+              mode="outlined"
+              value={estado}
+              onChangeText={(value) =>
+                setEstado(value.toUpperCase().slice(0, 2))
+              }
+              placeholder="SP"
+              autoCapitalize="characters"
+              style={styles.input}
+              maxLength={2}
+            />
+            <TextInput
+              label="Numero"
+              mode="outlined"
+              keyboardType="number-pad"
+              value={numero}
+              onChangeText={setNumero}
+              style={styles.input}
+            />
+            <TextInput
+              label="Complemento"
+              mode="outlined"
+              value={complemento}
+              onChangeText={setComplemento}
+              style={styles.input}
             />
             <HelperText type="error" visible={Boolean(cpfError)}>
               {cpfError}
