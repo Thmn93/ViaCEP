@@ -14,6 +14,7 @@ import {
     HelperText,
     Menu,
     Portal,
+    SegmentedButtons,
     Text,
     TextInput,
 } from "react-native-paper";
@@ -59,7 +60,9 @@ type RegisteredUser = {
   estado: string;
 };
 
-import { API_URL } from "../api-config";
+import { API_URL, MONGO_API_URL } from "../api-config";
+
+type DbTarget = 'sqlite' | 'mongo' | 'both';
 
 function getBrazilianStates(): BrazilianState[] {
   return [
@@ -114,10 +117,13 @@ export function CepSearch() {
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
   const [deleteDialogVisible, setDeleteDialogVisible] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
+  const [deleteTargetCpf, setDeleteTargetCpf] = useState<string | null>(null);
   const [consultaCpf, setConsultaCpf] = useState("");
   const [consultaError, setConsultaError] = useState("");
   const [consultaLoading, setConsultaLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [dbTarget, setDbTarget] = useState<DbTarget>('sqlite');
+  const [originalCpf, setOriginalCpf] = useState<string>("");
 
   const ITEMS_PER_PAGE = 2;
 
@@ -257,6 +263,7 @@ export function CepSearch() {
     setCpfError("");
     if (user) {
       setEditingUserId(user.id);
+      setOriginalCpf(user.cpf.replace(/\D/g, ""));
       setNome(user.nome);
       setEmail(user.email);
       setCpf(user.cpf);
@@ -269,6 +276,7 @@ export function CepSearch() {
       setComplemento(user.complemento);
     } else {
       setEditingUserId(null);
+      setOriginalCpf("");
       setNome("");
       setEmail("");
       setCpf("");
@@ -288,7 +296,59 @@ export function CepSearch() {
     setNumero("");
     setComplemento("");
     setEditingUserId(null);
+    setOriginalCpf("");
     setCpfError("");
+  };
+
+  const buildBody = () => ({
+    nome: nome.trim(),
+    email: email.trim(),
+    cpf: cpf.replace(/\D/g, ""),
+    cep,
+    logradouro,
+    bairro,
+    cidade,
+    estado,
+    numero,
+    complemento,
+  });
+
+  const saveToSqlite = async (body: ReturnType<typeof buildBody>) => {
+    const url = editingUserId
+      ? `${API_URL}/usuarios/${editingUserId}`
+      : `${API_URL}/usuarios`;
+    const method = editingUserId ? "PUT" : "POST";
+    const response = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ message: "Erro ao salvar no SQLite" }));
+      throw new Error(err.message || "Erro ao salvar no SQLite");
+    }
+    return response.json();
+  };
+
+  const saveToMongo = async (body: ReturnType<typeof buildBody>) => {
+    // Modo edição: PUT pelo CPF original; modo criação: POST
+    const isEditing = editingUserId !== null && originalCpf !== "";
+    const url = isEditing
+      ? `${MONGO_API_URL}/usuarios/cpf/${originalCpf}`
+      : `${MONGO_API_URL}/usuarios`;
+    const method = isEditing ? "PUT" : "POST";
+    const response = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      // 404 em edição = usuário não existe no MongoDB, ignorar silenciosamente
+      if (isEditing && response.status === 404) return null;
+      const err = await response.json().catch(() => ({ error: "Erro ao salvar no MongoDB" }));
+      throw new Error(err.error || "Erro ao salvar no MongoDB");
+    }
+    return response.json();
   };
 
   const handleCadastroSubmit = async () => {
@@ -310,35 +370,38 @@ export function CepSearch() {
     }
 
     try {
-      const body = {
-        nome: nome.trim(),
-        email: email.trim(),
-        cpf: cpf.replace(/\D/g, ""),
-        cep,
-        logradouro,
-        bairro,
-        cidade,
-        estado,
-        numero,
-        complemento,
-      };
+      const body = buildBody();
 
-      const url = editingUserId
-        ? `${API_URL}/usuarios/${editingUserId}`
-        : `${API_URL}/usuarios`;
-      const method = editingUserId ? "PUT" : "POST";
-
-      const response = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-
-      if (!response.ok) {
-        const err = await response
-          .json()
-          .catch(() => ({ message: "Erro ao salvar" }));
-        throw new Error(err.message || "Erro ao salvar");
+      if (dbTarget === 'sqlite') {
+        await saveToSqlite(body);
+      } else if (dbTarget === 'mongo') {
+        await saveToMongo(body);
+      } else {
+        // Modo "Ambos": tenta salvar nos dois simultaneamente
+        const [sqliteResult, mongoResult] = await Promise.allSettled([
+          saveToSqlite(body),
+          saveToMongo(body),
+        ]);
+        const erros: string[] = [];
+        if (sqliteResult.status === 'rejected') {
+          erros.push(`SQLite: ${sqliteResult.reason?.message ?? 'falha'}`);
+        }
+        if (mongoResult.status === 'rejected') {
+          erros.push(`MongoDB: ${mongoResult.reason?.message ?? 'falha'}`);
+        }
+        if (erros.length === 2) {
+          // Ambos falharam
+          throw new Error(erros.join(' | '));
+        }
+        if (erros.length === 1) {
+          // Um falhou: fecha o modal mas avisa o usuário
+          setCadastroModalVisible(false);
+          resetForm();
+          setCadastrosExpandidos(true);
+          await fetchAllCadastros();
+          setConsultaError(`Salvo parcialmente — ${erros[0]}`);
+          return;
+        }
       }
 
       setCadastroModalVisible(false);
@@ -350,8 +413,9 @@ export function CepSearch() {
     }
   };
 
-  const handleDeleteUser = (userId: number) => {
+  const handleDeleteUser = (userId: number, userCpf: string) => {
     setDeleteTargetId(userId);
+    setDeleteTargetCpf(userCpf.replace(/\D/g, ""));
     setDeleteDialogVisible(true);
   };
 
@@ -361,16 +425,34 @@ export function CepSearch() {
       return;
     }
     try {
-      await fetch(`${API_URL}/usuarios/${deleteTargetId}`, {
-        method: "DELETE",
-      });
+      // Tenta excluir nos dois bancos simultaneamente
+      const mongoDelete = deleteTargetCpf
+        ? fetch(`${MONGO_API_URL}/usuarios/cpf/${deleteTargetCpf}`, { method: "DELETE" })
+        : Promise.resolve(new Response('{}', { status: 200 }));
+
+      const [sqliteResult, mongoResult] = await Promise.allSettled([
+        fetch(`${API_URL}/usuarios/${deleteTargetId}`, { method: "DELETE" }),
+        mongoDelete,
+      ]);
+
+      const erros: string[] = [];
+      if (sqliteResult.status === 'rejected') erros.push('SQLite: falha ao excluir');
+      // 404 no Mongo = não existia lá, não é erro
+      if (mongoResult.status === 'rejected') erros.push('MongoDB: falha ao excluir');
+
       setDeleteDialogVisible(false);
       setDeleteTargetId(null);
+      setDeleteTargetCpf(null);
       await fetchAllCadastros();
+
+      if (erros.length > 0) {
+        setConsultaError(`Exclusão parcial — ${erros.join(' | ')}`);
+      }
     } catch {
       setConsultaError("Nao foi possivel excluir o cadastro.");
       setDeleteDialogVisible(false);
       setDeleteTargetId(null);
+      setDeleteTargetCpf(null);
     }
   };
 
@@ -631,7 +713,7 @@ export function CepSearch() {
                         mode="text"
                         compact
                         textColor="#b00020"
-                        onPress={() => handleDeleteUser(user.id)}
+                        onPress={() => handleDeleteUser(user.id, user.cpf)}
                       >
                         Excluir
                       </Button>
@@ -699,6 +781,19 @@ export function CepSearch() {
             {editingUserId ? "Editar cadastro" : "Dados do cadastro"}
           </Dialog.Title>
           <Dialog.Content>
+            <Text variant="labelMedium" style={styles.dbSelectorLabel}>
+              Salvar em:
+            </Text>
+            <SegmentedButtons
+              value={dbTarget}
+              onValueChange={(v) => setDbTarget(v as DbTarget)}
+              style={styles.dbSelector}
+              buttons={[
+                { value: 'sqlite', label: 'SQLite', icon: 'database' },
+                { value: 'mongo', label: 'MongoDB', icon: 'leaf' },
+                { value: 'both', label: 'Ambos', icon: 'content-save-all' },
+              ]}
+            />
             <TextInput
               label="Nome"
               mode="outlined"
@@ -869,6 +964,13 @@ const styles = StyleSheet.create({
   buttonWrapper: {
     marginTop: 8,
     alignItems: "center",
+  },
+  dbSelectorLabel: {
+    marginBottom: 6,
+    color: "#555",
+  },
+  dbSelector: {
+    marginBottom: 14,
   },
   dividerSection: {
     flexDirection: "row",
