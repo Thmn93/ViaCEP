@@ -59,8 +59,7 @@ type RegisteredUser = {
   estado: string;
 };
 
-const API_URL =
-  Platform.OS === "android" ? "http://10.0.2.2:3333" : "http://localhost:3333";
+import { API_URL } from "../api-config";
 
 function getBrazilianStates(): BrazilianState[] {
   return [

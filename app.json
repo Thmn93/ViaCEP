@@ -40,6 +40,9 @@
         }
       ]
     ],
+    "extra": {
+      "apiUrl": "http://10.108.76.85:3333"
+    },
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
